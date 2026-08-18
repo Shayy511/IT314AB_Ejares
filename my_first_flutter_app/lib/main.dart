@@ -17,9 +17,7 @@ class MyApp extends StatelessWidget {
         ),
         fontFamily: 'Georgia',
       ),
-      home: const MyHomePage(
-        title: 'My First Flutter Application',
-      ),
+      home: const MyHomePage(title: 'My First Flutter Application'),
     );
   }
 }
@@ -41,10 +39,7 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Colors.deepPurple,
         title: Text(
           widget.title,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
       ),
       backgroundColor: const Color(0xFFFFF3E0),
@@ -53,7 +48,6 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Center(
           child: Column(
             children: [
-               
               Card(
                 margin: const EdgeInsets.all(16),
                 elevation: 5,
@@ -88,10 +82,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
                       const SizedBox(height: 8),
 
-                      const Text(
-                        'BSIT-3',
-                        style: TextStyle(fontSize: 18),
-                      ),
+                      const Text('BSIT-3', style: TextStyle(fontSize: 18)),
 
                       const SizedBox(height: 8),
 
@@ -137,7 +128,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
               ),
 
-             // Code for the Second Card
+              // Code for the Second Card
               Card(
                 margin: const EdgeInsets.all(16),
                 elevation: 5,
@@ -159,9 +150,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
                       const Text(
                         'Favorite Sports',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
 
                       const Text('Volleyball and Swimming'),
@@ -170,9 +159,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
                       const Text(
                         'Favorite Colors',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
 
                       const Text('Red and Black'),
@@ -181,9 +168,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
                       const Text(
                         'Favorite Movie',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
 
                       const Text('The Chronicles of Narnia'),
@@ -196,9 +181,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         children: const [
                           Text(
                             'Favorite Food:',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                           SizedBox(width: 8),
                           Text('Chicken Adobo'),

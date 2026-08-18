@@ -57,11 +57,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  assets:
-    - assets/image/DBTC-_School_Logo.png
-
   # To add assets to your application, add an assets section, like this:
-  # assets:
+  assets:
+      - assets/DBTC-_School_Logo.png
+
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
