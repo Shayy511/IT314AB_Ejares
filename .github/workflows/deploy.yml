@@ -1,27 +1,44 @@
+
 name: Deploy Flutter Web to Lightsail
 
 on:
   push:
-    branches: [ feature/Exam ]
+    branches:
+      - feature/student-list
+
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
+      # Step 1: Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Step 2: Verify Flutter project directory
+      - name: Check Flutter project files
+        run: |
+          pwd
+          ls -la
+          find . -name pubspec.yaml -print
+          test -f pubspec.yaml
+
+      # Step 3: Setup Flutter
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
 
+      # Step 4: Install dependencies and build
       - name: Build Flutter Web
         run: |
           flutter pub get
           flutter build web --release
 
+      # Step 5: Upload build to AWS Lightsail
       - name: Upload Build to Server via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -32,7 +49,9 @@ jobs:
           source: "build/web/*"
           target: "/var/www/flutter_app"
           strip_components: 2
+          overwrite: true
 
+      # Step 6: Reload Nginx
       - name: Execute Remote SSH Commands
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -43,4 +62,5 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
+            sudo nginx -t
             sudo systemctl reload nginx
