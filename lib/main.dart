@@ -28,7 +28,7 @@ class MyApp extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: const [
-                  Text('My Team', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+                  Text('LOL', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
                   Text('12  VS  14', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                   Text('Opponent', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
                 ],
