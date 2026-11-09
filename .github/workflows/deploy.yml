@@ -34,7 +34,7 @@ jobs:
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: ${{ secrets.LIGHTSAIL_PORT }}
-          source: "build/web/*"
+          source: "build/web/*."
           target: "/var/www/flutter_app"
           strip_components: 2
           overwrite: true
