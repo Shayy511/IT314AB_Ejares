@@ -18,7 +18,6 @@ jobs:
           cache: true
 
       - name: Build Flutter Web
-        working-directory: ./my_first_flutter_app
         run: |
           flutter pub get
           flutter build web --release
@@ -30,9 +29,9 @@ jobs:
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: ${{ secrets.LIGHTSAIL_PORT }}
-          source: "my_first_flutter_app/build/web/*"
+          source: "build/web/*"
           target: "/var/www/flutter_app"
-          strip_components: 3
+          strip_components: 2
 
       - name: Execute Remote SSH Commands
         uses: appleboy/ssh-action@v1.0.3
