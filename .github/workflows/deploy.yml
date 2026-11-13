@@ -18,7 +18,7 @@ jobs:
           cache: true
 
       - name: Build Flutter Web
-        working-directory: ./my_first_flutter_app
+        working-directory: ./ITE314AB_Ejares
         run: |
           flutter pub get
           flutter build web --release
