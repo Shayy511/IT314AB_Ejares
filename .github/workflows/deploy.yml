@@ -1,16 +1,12 @@
-
 name: Deploy Flutter Web to Lightsail
 
 on:
   push:
-    branches:
-      - feature/student-list
-  workflow_dispatch:
+    branches: [ feature/student-list ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -18,60 +14,34 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
-
-      - name: Find Flutter project
-        shell: bash
-        run: |
-          PROJECTS=$(find . -name pubspec.yaml -not -path '*/build/*' -not -path '*/.dart_tool/*')
-          COUNT=$(printf '%s\n' "$PROJECTS" | grep -c 'pubspec.yaml' || true)
-          if [ "$COUNT" -ne 1 ]; then
-            echo "Expected one Flutter project, found $COUNT"
-            printf '%s\n' "$PROJECTS"
-            exit 1
-          fi
-          PROJECT_DIR=$(dirname "$PROJECTS")
-          echo "FLUTTER_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Flutter project: $PROJECT_DIR"
-
-      - name: Install dependencies
-        run: |
-          cd "$FLUTTER_DIR"
-          flutter pub get
+          channel: 'stable'
+          cache: true
 
       - name: Build Flutter Web
+        working-directory: ./my_first_flutter_app
         run: |
-          cd "$FLUTTER_DIR"
+          flutter pub get
           flutter build web --release
 
-      - name: Package Flutter Web
-        run: |
-          tar -czf flutter-web.tar.gz -C "$FLUTTER_DIR/build/web" .
-
-      - name: Upload build to Lightsail
-        uses: appleboy/scp-action@v1
+      - name: Upload Build to Server via SCP
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          source: flutter-web.tar.gz
-          target: /tmp
+          port: ${{ secrets.LIGHTSAIL_PORT }}
+          source: "my_first_flutter_app/build/web/*"
+          target: "/var/www/flutter_app"
+          strip_components: 3
 
-      - name: Deploy Flutter Web
-        uses: appleboy/ssh-action@v1
+      - name: Execute Remote SSH Commands
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          port: ${{ secrets.LIGHTSAIL_PORT }}
+          script_stop: true
           script: |
-            set -e
-            DEPLOY_DIR=$(mktemp -d)
-            tar -xzf /tmp/flutter-web.tar.gz -C "$DEPLOY_DIR"
-            sudo mkdir -p /var/www/flutter_app
-            sudo rsync -a --delete "$DEPLOY_DIR/" /var/www/flutter_app/
-            rm -rf "$DEPLOY_DIR"
-            rm -f /tmp/flutter-web.tar.gz
-            sudo nginx -t
+            set -euo pipefail
             sudo systemctl reload nginx
-            echo "Flutter deployment completed!"
-
