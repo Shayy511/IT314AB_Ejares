@@ -1,27 +1,57 @@
+
 name: Deploy Flutter Web to Lightsail
 
 on:
   push:
-    branches: [ feature/student-list ]
+    branches:
+      - feature/student-list
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Find Flutter project
+        id: project
+        shell: bash
+        run: |
+          echo "Searching for Flutter project..."
+          find . -name pubspec.yaml -not -path '*/.dart_tool/*'
+
+          PROJECT=$(find . -name pubspec.yaml \
+            -not -path '*/.dart_tool/*' -print -quit)
+
+          if [ -z "$PROJECT" ]; then
+            echo "ERROR: pubspec.yaml not found."
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PROJECT")
+          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "Flutter project: $PROJECT_DIR"
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: stable
           cache: true
 
       - name: Build Flutter Web
-        working-directory: ./ITE314AB_Ejares
+        shell: bash
         run: |
+          cd "${{ steps.project.outputs.dir }}"
           flutter pub get
           flutter build web --release
+
+      - name: Prepare deployment files
+        shell: bash
+        run: |
+          mkdir -p deploy_web
+          cp -a "${{ steps.project.outputs.dir }}/build/web/." deploy_web/
 
       - name: Upload Build to Server via SCP
         uses: appleboy/scp-action@v0.1.7
@@ -30,9 +60,9 @@ jobs:
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: ${{ secrets.LIGHTSAIL_PORT }}
-          source: "my_first_flutter_app/build/web/*"
+          source: "deploy_web/*"
           target: "/var/www/flutter_app"
-          strip_components: 3
+          strip_components: 1
 
       - name: Execute Remote SSH Commands
         uses: appleboy/ssh-action@v1.0.3
@@ -41,7 +71,5 @@ jobs:
           username: ${{ secrets.LIGHTSAIL_USER }}
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           port: ${{ secrets.LIGHTSAIL_PORT }}
-          script_stop: true
           script: |
-            set -euo pipefail
             sudo systemctl reload nginx
