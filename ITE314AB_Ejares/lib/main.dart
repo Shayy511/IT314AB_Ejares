@@ -10,7 +10,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'TEST LOL',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color.fromARGB(255, 222, 66, 14),
@@ -68,7 +68,7 @@ class _MyHomePageState extends State<MyHomePage> {
   final List<Profile> profiles = [
     Profile(
       image: 'assets/image/Meee.png',
-      name: 'Shairha Ejares',
+      name: 'Bang Yunha',
       courseSection: 'BSIT 3',
       age: 20,
       hobby: 'Swimming',
