@@ -56,10 +56,6 @@ class Profile {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  String name = "Lim Seowon";
-  String courseSection = "IT314AB";
-  int age = 20;
-  String hobby = "Swimming";
 
   final List<MaterialColor> accents = const [
     Colors.deepPurple,
