@@ -56,7 +56,7 @@ class Profile {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  String name = "Shairha May B. Ejares";
+  String name = "Lim Seowon";
   String courseSection = "IT314AB";
   int age = 20;
   String hobby = "Swimming";
