@@ -72,7 +72,7 @@ class _MyHomePageState extends State<MyHomePage> {
   final List<Profile> profiles = [
     Profile(
       image: 'assets/image/Meee.png',
-      name: 'Shairha May B. Ejares',
+      name: 'Shairha Ejares',
       courseSection: 'BSIT 3',
       age: 20,
       hobby: 'Swimming',
