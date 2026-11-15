@@ -18,18 +18,42 @@ class MyApp extends StatelessWidget {
         ),
         fontFamily: 'Georgia',
       ),
-      home: const MyHomePage(title: 'My First Flutter Application'),
+      initialRoute: '/student-list',
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/student-list':
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => const StudentListScreen(title: 'My First Flutter Application'),
+            );
+          case '/student-details':
+            final student = settings.arguments;
+            if (student is Profile) {
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (_) => StudentDetailsScreen(profile: student),
+              );
+            }
+            return MaterialPageRoute(
+              builder: (_) => const Scaffold(
+                body: Center(child: Text('No student was selected')),
+              ),
+            );
+          case '/add-student':
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => const AddStudentScreen(),
+            );
+          default:
+            return MaterialPageRoute(
+              builder: (_) => const Scaffold(
+                body: Center(child: Text('Unknown route')),
+              ),
+            );
+        }
+      },
     );
   }
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
 }
 
 enum DirectoryView { loading, students, empty }
@@ -62,7 +86,17 @@ class Profile {
   });
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+
+class StudentListScreen extends StatefulWidget {
+  const StudentListScreen({super.key, required this.title});
+
+  final String title;
+
+  @override
+  State<StudentListScreen> createState() => _StudentListScreenState();
+}
+
+class _StudentListScreenState extends State<StudentListScreen> {
   final List<MaterialColor> accents = const [
     Colors.deepPurple,
     Colors.deepOrange,
@@ -178,11 +212,10 @@ class _MyHomePageState extends State<MyHomePage> {
       );
   }
 
-  void tapStudent(Profile profile) {
-    setState(() {
-      selectedStudentId = profile.studentId;
-    });
-    showMessage('Student Card tapped: ${profile.name}');
+  Future<void> tapStudent(Profile profile) async {
+    setState(() => selectedStudentId = profile.studentId);
+    await Navigator.pushNamed(context, '/student-details', arguments: profile);
+    if (mounted) setState(() {});
   }
 
   void favoriteStudent(Profile profile) {
@@ -272,6 +305,11 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.pushNamed(context, '/add-student'),
+        icon: const Icon(Icons.person_add),
+        label: const Text('Add Student'),
+      ),
       appBar: AppBar(
         foregroundColor: Colors.white,
         centerTitle: true,
@@ -700,6 +738,148 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
             const SizedBox(height: 16),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class StudentDetailsScreen extends StatefulWidget {
+  const StudentDetailsScreen({super.key, required this.profile});
+  final Profile profile;
+
+  @override
+  State<StudentDetailsScreen> createState() => _StudentDetailsScreenState();
+}
+
+class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
+  Future<void> editStudent() async {
+    final name = TextEditingController(text: widget.profile.name);
+    final course = TextEditingController(text: widget.profile.courseSection);
+    bool active = widget.profile.isActive;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, updateDialog) => AlertDialog(
+          title: const Text('Edit Student'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Student ID: ${widget.profile.studentId}'),
+                const SizedBox(height: 12),
+                TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
+                TextField(controller: course, decoration: const InputDecoration(labelText: 'Course & Section')),
+                SwitchListTile(
+                  title: const Text('Active'),
+                  value: active,
+                  onChanged: (value) => updateDialog(() => active = value),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                if (name.text.trim().isEmpty || course.text.trim().isEmpty) return;
+                widget.profile.name = name.text.trim();
+                widget.profile.courseSection = course.text.trim();
+                widget.profile.isActive = active;
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    name.dispose();
+    course.dispose();
+    if (!mounted) return;
+    if (saved == true) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Student updated')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = widget.profile;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Student Details')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            CircleAvatar(
+              radius: 52,
+              backgroundColor: Colors.deepPurple.shade50,
+              backgroundImage: AssetImage(profile.image),
+              onBackgroundImageError: (_, _) {},
+            ),
+            const SizedBox(height: 16),
+            Text(profile.name, textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 18),
+            Card(child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Student ID: ${profile.studentId}'),
+                const SizedBox(height: 8),
+                Text('Course: ${profile.courseSection}'),
+                const SizedBox(height: 8),
+                Text('Status: ${profile.isActive ? 'Active' : 'Inactive'}'),
+                const SizedBox(height: 8),
+                Text('Age: ${profile.age}'),
+                const SizedBox(height: 8),
+                Text('Hobby: ${profile.hobby}'),
+                const SizedBox(height: 8),
+                Text('Height: ${profile.height} cm'),
+                const SizedBox(height: 8),
+                Text('Email: ${profile.email}'),
+                const SizedBox(height: 8),
+                Text('Favorite subject: ${profile.favoriteSubject}'),
+                const SizedBox(height: 8),
+                Text('Favorite: ${profile.isFavorite ? 'Yes' : 'No'}'),
+              ]),
+            )),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: editStudent,
+              icon: const Icon(Icons.edit),
+              label: const Text('Edit Student'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class AddStudentScreen extends StatelessWidget {
+  const AddStudentScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Add Student')),
+      body: const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.person_add_alt_1, size: 76, color: Colors.deepPurple),
+              SizedBox(height: 18),
+              Text('Add Student', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+              SizedBox(height: 10),
+              Text('Fill in the details to add a new student.',
+                textAlign: TextAlign.center),
+            ],
+          ),
         ),
       ),
     );
