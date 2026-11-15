@@ -32,6 +32,8 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
+enum DirectoryView { loading, students, empty }
+
 class Profile {
   String image;
   String name;
@@ -43,6 +45,7 @@ class Profile {
   String email;
   String favoriteSubject;
   bool isFavorite;
+  bool isActive;
 
   Profile({
     required this.image,
@@ -55,6 +58,7 @@ class Profile {
     required this.email,
     required this.favoriteSubject,
     this.isFavorite = false,
+    this.isActive = true,
   });
 }
 
@@ -67,7 +71,9 @@ class _MyHomePageState extends State<MyHomePage> {
     Colors.indigo,
   ];
 
-  final List<Profile> profiles = [
+  List<Profile> profiles = createInitialProfiles();
+
+  static List<Profile> createInitialProfiles() => [
     Profile(
       image: 'assets/image/Meee.png',
       name: 'Shairha May B. Ejares',
@@ -81,6 +87,7 @@ class _MyHomePageState extends State<MyHomePage> {
     ),
     Profile(
       image: 'assets/image/Pal.png',
+      isActive: false,
       name: 'Karol S. Pal',
       courseSection: 'BSIT 3',
       age: 21,
@@ -114,6 +121,7 @@ class _MyHomePageState extends State<MyHomePage> {
     ),
     Profile(
       image: 'assets/image/Therese.png',
+      isActive: false,
       name: 'Therese Deanne Lumactud',
       courseSection: 'BSIT 3',
       age: 21,
@@ -135,6 +143,13 @@ class _MyHomePageState extends State<MyHomePage> {
       favoriteSubject: 'English',
     ),
   ];
+
+  bool isLoading = false;
+  DirectoryView get directoryView {
+    if (isLoading) return DirectoryView.loading;
+    if (profiles.isEmpty) return DirectoryView.empty;
+    return DirectoryView.students;
+  }
 
   bool sortedAlphabetically = false;
   String? selectedStudentId;
@@ -197,6 +212,15 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  void toggleActive(Profile profile) {
+    setState(() {
+      profile.isActive = !profile.isActive;
+    });
+    showMessage(
+      '${profile.name} is now ${profile.isActive ? 'Active' : 'Inactive'}',
+    );
+  }
+
   void deleteStudent(Profile profile) {
     setState(() {
       profiles.remove(profile);
@@ -205,6 +229,31 @@ class _MyHomePageState extends State<MyHomePage> {
       }
     });
     showMessage('${profile.name} removed');
+  }
+
+  Future<void> reloadStudents() async {
+    if (isLoading) return;
+    setState(() {
+      isLoading = true;
+    });
+    await Future.delayed(const Duration(seconds: 4));
+    if (!mounted) return;
+    setState(() {
+      profiles = createInitialProfiles();
+      selectedStudentId = null;
+      sortedAlphabetically = false;
+      isLoading = false;
+    });
+    showMessage('Student directory loaded');
+  }
+
+  void restoreStudents() {
+    setState(() {
+      profiles = createInitialProfiles();
+      selectedStudentId = null;
+      sortedAlphabetically = false;
+    });
+    showMessage('Student directory restored');
   }
 
   Widget infoRow(IconData icon, String text, Color color) {
@@ -227,6 +276,11 @@ class _MyHomePageState extends State<MyHomePage> {
         foregroundColor: Colors.white,
         centerTitle: true,
         actions: [
+          IconButton(
+            tooltip: 'Reload students',
+            onPressed: isLoading ? null : reloadStudents,
+            icon: const Icon(Icons.refresh),
+          ),
           IconButton(
             tooltip: sortedAlphabetically ? 'Original order' : 'Sort A to Z',
             icon: Icon(
@@ -361,7 +415,30 @@ class _MyHomePageState extends State<MyHomePage> {
                 ],
               ),
             ),
-            if (profiles.isEmpty)
+            if (directoryView == DirectoryView.students)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                child: Text(
+                  'Active: ${profiles.where((p) => p.isActive).length}   '
+                  'Inactive: ${profiles.where((p) => !p.isActive).length}',
+                  style: const TextStyle(
+                    color: Colors.deepPurple,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            if (directoryView == DirectoryView.loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 65),
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Loading student directory...'),
+                  ],
+                ),
+              )
+            else if (directoryView == DirectoryView.empty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 48),
                 child: Column(
@@ -387,6 +464,12 @@ class _MyHomePageState extends State<MyHomePage> {
                         fontSize: 14,
                         color: Colors.deepPurple.shade300,
                       ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: restoreStudents,
+                      icon: const Icon(Icons.restore),
+                      label: const Text('Restore students'),
                     ),
                   ],
                 ),
@@ -465,6 +548,29 @@ class _MyHomePageState extends State<MyHomePage> {
                                                   color: accent.shade700,
                                                 ),
                                               ),
+                                              const SizedBox(height: 4),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: profile.isActive
+                                                      ? Colors.green.shade100
+                                                      : Colors.grey.shade300,
+                                                  borderRadius: BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  profile.isActive ? 'Active' : 'Inactive',
+                                                  style: TextStyle(
+                                                    color: profile.isActive
+                                                        ? Colors.green.shade800
+                                                        : Colors.grey.shade800,
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
                                               if (isSelected)
                                                 const Text(
                                                   'Selected student',
@@ -481,6 +587,18 @@ class _MyHomePageState extends State<MyHomePage> {
                                                     fontSize: 12,
                                                     color: Colors.red,
                                                     fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              if (!profile.isActive)
+                                                const Padding(
+                                                  padding: EdgeInsets.only(top: 4),
+                                                  child: Text(
+                                                    '⚠ This student is inactive',
+                                                    style: TextStyle(
+                                                      color: Colors.deepOrange,
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
                                                   ),
                                                 ),
                                               const SizedBox(height: 4),
@@ -527,6 +645,18 @@ class _MyHomePageState extends State<MyHomePage> {
                                         Column(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
+                                            IconButton(
+                                              tooltip: 'Change Active Status',
+                                              icon: Icon(
+                                                profile.isActive
+                                                    ? Icons.toggle_on
+                                                    : Icons.toggle_off,
+                                                color: profile.isActive
+                                                    ? Colors.green
+                                                    : Colors.grey,
+                                              ),
+                                              onPressed: () => toggleActive(profile),
+                                            ),
                                             IconButton(
                                               tooltip: 'Favorite',
                                               icon: Icon(
