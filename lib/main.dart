@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const MyApp());
@@ -24,7 +27,9 @@ class MyApp extends StatelessWidget {
           case '/student-list':
             return MaterialPageRoute(
               settings: settings,
-              builder: (_) => const StudentListScreen(title: 'My First Flutter Application'),
+              builder: (_) => const StudentListScreen(
+                title: 'My First Flutter Application',
+              ),
             );
           case '/student-details':
             final student = settings.arguments;
@@ -40,15 +45,14 @@ class MyApp extends StatelessWidget {
               ),
             );
           case '/add-student':
-            return MaterialPageRoute(
+            return MaterialPageRoute<Profile>(
               settings: settings,
               builder: (_) => const AddStudentScreen(),
             );
           default:
             return MaterialPageRoute(
-              builder: (_) => const Scaffold(
-                body: Center(child: Text('Unknown route')),
-              ),
+              builder: (_) =>
+                  const Scaffold(body: Center(child: Text('Unknown route'))),
             );
         }
       },
@@ -84,8 +88,60 @@ class Profile {
     this.isFavorite = false,
     this.isActive = true,
   });
+
+  // CTF 8: Turn each student into JSON for local persistence.
+  Map<String, dynamic> toJson() => {
+    'image': image,
+    'name': name,
+    'courseSection': courseSection,
+    'age': age,
+    'hobby': hobby,
+    'height': height,
+    'studentId': studentId,
+    'email': email,
+    'favoriteSubject': favoriteSubject,
+    'isFavorite': isFavorite,
+    'isActive': isActive,
+  };
+
+  factory Profile.fromJson(Map<String, dynamic> json) => Profile(
+    image: json['image'] as String? ?? 'assets/image/DBTC-_School_Logo.png',
+    name: json['name'] as String? ?? '',
+    courseSection: json['courseSection'] as String? ?? '',
+    age: (json['age'] as num?)?.toInt() ?? 0,
+    hobby: json['hobby'] as String? ?? 'Not specified',
+    height: (json['height'] as num?)?.toDouble() ?? 0,
+    studentId: json['studentId'] as String? ?? '',
+    email: json['email'] as String? ?? '',
+    favoriteSubject: json['favoriteSubject'] as String? ?? 'Not specified',
+    isFavorite: json['isFavorite'] as bool? ?? false,
+    isActive: json['isActive'] as bool? ?? true,
+  );
 }
 
+// CTF 8: Save the entire directory, including edits and deletions.
+class StudentLocalStorage {
+  static const String _key = 'ctf8_student_directory_v1';
+  static final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
+
+  static Future<List<Profile>?> load() async {
+    final raw = await _prefs.getString(_key);
+    if (raw == null) return null; // First launch: use original students.
+    final values = jsonDecode(raw) as List<dynamic>;
+    return values
+        .map(
+          (value) => Profile.fromJson(Map<String, dynamic>.from(value as Map)),
+        )
+        .toList(); // An empty saved list stays empty.
+  }
+
+  static Future<void> save(List<Profile> students) async {
+    await _prefs.setString(
+      _key,
+      jsonEncode(students.map((student) => student.toJson()).toList()),
+    );
+  }
+}
 
 class StudentListScreen extends StatefulWidget {
   const StudentListScreen({super.key, required this.title});
@@ -178,7 +234,55 @@ class _StudentListScreenState extends State<StudentListScreen> {
     ),
   ];
 
-  bool isLoading = false;
+  bool isLoading = true;
+
+  // CTF 8: Load saved students, or keep the original profiles on first launch.
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedStudents();
+  }
+
+  Future<void> _loadSavedStudents() async {
+    try {
+      final saved = await StudentLocalStorage.load();
+      if (!mounted) return;
+      setState(() {
+        if (saved != null) profiles = saved;
+        isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => isLoading = false);
+      showMessage('Could not load saved records');
+    }
+  }
+
+  Future<void> _saveStudents() async {
+    try {
+      await StudentLocalStorage.save(profiles);
+    } catch (_) {
+      if (mounted) showMessage('Could not save student records');
+    }
+  }
+
+  // CTF 8: A form returns a new Profile to the existing screen.
+  Future<void> _openAddStudent() async {
+    final newStudent = await Navigator.pushNamed<Profile>(
+      context,
+      '/add-student',
+      arguments: profiles.map((profile) => profile.studentId).toList(),
+    );
+    if (!mounted || newStudent == null) return;
+    if (profiles.any((p) => p.studentId == newStudent.studentId)) {
+      showMessage('Student ID already exists');
+      return;
+    }
+    setState(() => profiles.add(newStudent));
+    await _saveStudents();
+    if (mounted) showMessage('${newStudent.name} enrolled successfully');
+  }
+
   DirectoryView get directoryView {
     if (isLoading) return DirectoryView.loading;
     if (profiles.isEmpty) return DirectoryView.empty;
@@ -205,23 +309,24 @@ class _StudentListScreenState extends State<StudentListScreen> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 2),
-        ),
+        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
       );
   }
 
   Future<void> tapStudent(Profile profile) async {
     setState(() => selectedStudentId = profile.studentId);
     await Navigator.pushNamed(context, '/student-details', arguments: profile);
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      await _saveStudents();
+    }
   }
 
   void favoriteStudent(Profile profile) {
     setState(() {
       profile.isFavorite = !profile.isFavorite;
     });
+    _saveStudents();
     showMessage(
       profile.isFavorite
           ? '${profile.name} added to favorites'
@@ -229,26 +334,184 @@ class _StudentListScreenState extends State<StudentListScreen> {
     );
   }
 
-  void editStudent(Profile profile) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit Student'),
-        content: Text('Edit action opened for ${profile.name}.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
+  Future<void> editStudent(Profile profile) async {
+    final nameController = TextEditingController(text: profile.name);
+    final courseController = TextEditingController(text: profile.courseSection);
+    final emailController = TextEditingController(text: profile.email);
+    final ageController = TextEditingController(text: profile.age.toString());
+    final hobbyController = TextEditingController(text: profile.hobby);
+    final subjectController = TextEditingController(
+      text: profile.favoriteSubject,
     );
+
+    bool isActive = profile.isActive;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Edit Student'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Student ID: ${profile.studentId}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Full Name',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: courseController,
+                      decoration: const InputDecoration(
+                        labelText: 'Course & Section',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: emailController,
+                      decoration: const InputDecoration(
+                        labelText: 'Email Address',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: ageController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Age',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: hobbyController,
+                      decoration: const InputDecoration(
+                        labelText: 'Hobby',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: subjectController,
+                      decoration: const InputDecoration(
+                        labelText: 'Favorite Subject',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    SwitchListTile(
+                      title: const Text('Active'),
+                      value: isActive,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          isActive = value;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext, false);
+                  },
+                  child: const Text('Cancel'),
+                ),
+
+                ElevatedButton(
+                  onPressed: () {
+                    final name = nameController.text.trim();
+                    final course = courseController.text.trim();
+                    final email = emailController.text.trim();
+                    final age = int.tryParse(ageController.text.trim());
+
+                    if (name.isEmpty ||
+                        course.isEmpty ||
+                        email.isEmpty ||
+                        age == null ||
+                        age < 0) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Please enter valid student information.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
+                    profile.name = name;
+                    profile.courseSection = course;
+                    profile.email = email;
+                    profile.age = age;
+                    profile.hobby = hobbyController.text.trim();
+                    profile.favoriteSubject = subjectController.text.trim();
+                    profile.isActive = isActive;
+
+                    Navigator.pop(dialogContext, true);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    nameController.dispose();
+    courseController.dispose();
+    emailController.dispose();
+    ageController.dispose();
+    hobbyController.dispose();
+    subjectController.dispose();
+
+    if (!mounted) return;
+
+    if (saved == true) {
+      setState(() {});
+
+      await _saveStudents();
+
+      if (!mounted) return;
+
+      showMessage('${profile.name} updated successfully');
+    }
   }
 
   void toggleActive(Profile profile) {
     setState(() {
       profile.isActive = !profile.isActive;
     });
+    _saveStudents();
     showMessage(
       '${profile.name} is now ${profile.isActive ? 'Active' : 'Inactive'}',
     );
@@ -261,6 +524,7 @@ class _StudentListScreenState extends State<StudentListScreen> {
         selectedStudentId = null;
       }
     });
+    _saveStudents();
     showMessage('${profile.name} removed');
   }
 
@@ -270,9 +534,10 @@ class _StudentListScreenState extends State<StudentListScreen> {
       isLoading = true;
     });
     await Future.delayed(const Duration(seconds: 4));
+    final saved = await StudentLocalStorage.load();
     if (!mounted) return;
     setState(() {
-      profiles = createInitialProfiles();
+      profiles = saved ?? createInitialProfiles();
       selectedStudentId = null;
       sortedAlphabetically = false;
       isLoading = false;
@@ -286,6 +551,7 @@ class _StudentListScreenState extends State<StudentListScreen> {
       selectedStudentId = null;
       sortedAlphabetically = false;
     });
+    _saveStudents();
     showMessage('Student directory restored');
   }
 
@@ -306,7 +572,7 @@ class _StudentListScreenState extends State<StudentListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.pushNamed(context, '/add-student'),
+        onPressed: isLoading ? null : _openAddStudent,
         icon: const Icon(Icons.person_add),
         label: const Text('Add Student'),
       ),
@@ -455,7 +721,10 @@ class _StudentListScreenState extends State<StudentListScreen> {
             ),
             if (directoryView == DirectoryView.students)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 4,
+                ),
                 child: Text(
                   'Active: ${profiles.where((p) => p.isActive).length}   '
                   'Inactive: ${profiles.where((p) => !p.isActive).length}',
@@ -541,7 +810,9 @@ class _StudentListScreenState extends State<StudentListScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: Material(
-                        color: isSelected ? const Color(0xFFFFF8E1) : Colors.white,
+                        color: isSelected
+                            ? const Color(0xFFFFF8E1)
+                            : Colors.white,
                         child: InkWell(
                           onTap: () => tapStudent(profile),
                           child: IntrinsicHeight(
@@ -553,7 +824,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
                                   child: Padding(
                                     padding: const EdgeInsets.all(14),
                                     child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Container(
                                           padding: const EdgeInsets.all(3),
@@ -569,14 +841,17 @@ class _StudentListScreenState extends State<StudentListScreen> {
                                           child: CircleAvatar(
                                             radius: 30,
                                             backgroundColor: accent.shade50,
-                                            backgroundImage: AssetImage(profile.image),
+                                            backgroundImage: AssetImage(
+                                              profile.image,
+                                            ),
                                             onBackgroundImageError: (_, _) {},
                                           ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 profile.name,
@@ -588,18 +863,22 @@ class _StudentListScreenState extends State<StudentListScreen> {
                                               ),
                                               const SizedBox(height: 4),
                                               Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 4,
-                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
                                                 decoration: BoxDecoration(
                                                   color: profile.isActive
                                                       ? Colors.green.shade100
                                                       : Colors.grey.shade300,
-                                                  borderRadius: BorderRadius.circular(12),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
                                                 ),
                                                 child: Text(
-                                                  profile.isActive ? 'Active' : 'Inactive',
+                                                  profile.isActive
+                                                      ? 'Active'
+                                                      : 'Inactive',
                                                   style: TextStyle(
                                                     color: profile.isActive
                                                         ? Colors.green.shade800
@@ -629,25 +908,30 @@ class _StudentListScreenState extends State<StudentListScreen> {
                                                 ),
                                               if (!profile.isActive)
                                                 const Padding(
-                                                  padding: EdgeInsets.only(top: 4),
+                                                  padding: EdgeInsets.only(
+                                                    top: 4,
+                                                  ),
                                                   child: Text(
                                                     '⚠ This student is inactive',
                                                     style: TextStyle(
                                                       color: Colors.deepOrange,
                                                       fontSize: 12,
-                                                      fontWeight: FontWeight.bold,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                     ),
                                                   ),
                                                 ),
                                               const SizedBox(height: 4),
                                               Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 2,
-                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 2,
+                                                    ),
                                                 decoration: BoxDecoration(
                                                   color: accent.shade50,
-                                                  borderRadius: BorderRadius.circular(10),
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
                                                 ),
                                                 child: Text(
                                                   '${profile.courseSection} • Age ${profile.age}',
@@ -660,8 +944,13 @@ class _StudentListScreenState extends State<StudentListScreen> {
                                               ),
                                               const SizedBox(height: 4),
                                               Text('Hobby: ${profile.hobby}'),
-                                              Text('Height: ${profile.height} cm'),
-                                              Divider(height: 14, color: accent.shade100),
+                                              Text(
+                                                'Height: ${profile.height} cm',
+                                              ),
+                                              Divider(
+                                                height: 14,
+                                                color: accent.shade100,
+                                              ),
                                               infoRow(
                                                 Icons.badge_outlined,
                                                 'ID: ${profile.studentId}',
@@ -693,7 +982,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
                                                     ? Colors.green
                                                     : Colors.grey,
                                               ),
-                                              onPressed: () => toggleActive(profile),
+                                              onPressed: () =>
+                                                  toggleActive(profile),
                                             ),
                                             IconButton(
                                               tooltip: 'Favorite',
@@ -703,7 +993,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
                                                     : Icons.favorite_border,
                                                 color: Colors.red,
                                               ),
-                                              onPressed: () => favoriteStudent(profile),
+                                              onPressed: () =>
+                                                  favoriteStudent(profile),
                                             ),
                                             IconButton(
                                               tooltip: 'Edit',
@@ -711,7 +1002,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
                                                 Icons.edit_outlined,
                                                 color: Colors.blue,
                                               ),
-                                              onPressed: () => editStudent(profile),
+                                              onPressed: () =>
+                                                  editStudent(profile),
                                             ),
                                             IconButton(
                                               tooltip: 'Delete',
@@ -719,7 +1011,8 @@ class _StudentListScreenState extends State<StudentListScreen> {
                                                 Icons.delete_outline,
                                                 color: accent.shade700,
                                               ),
-                                              onPressed: () => deleteStudent(profile),
+                                              onPressed: () =>
+                                                  deleteStudent(profile),
                                             ),
                                           ],
                                         ),
@@ -743,7 +1036,6 @@ class _StudentListScreenState extends State<StudentListScreen> {
     );
   }
 }
-
 
 class StudentDetailsScreen extends StatefulWidget {
   const StudentDetailsScreen({super.key, required this.profile});
@@ -769,8 +1061,16 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
               children: [
                 Text('Student ID: ${widget.profile.studentId}'),
                 const SizedBox(height: 12),
-                TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
-                TextField(controller: course, decoration: const InputDecoration(labelText: 'Course & Section')),
+                TextField(
+                  controller: name,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                ),
+                TextField(
+                  controller: course,
+                  decoration: const InputDecoration(
+                    labelText: 'Course & Section',
+                  ),
+                ),
                 SwitchListTile(
                   title: const Text('Active'),
                   value: active,
@@ -780,10 +1080,17 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
             FilledButton(
               onPressed: () {
-                if (name.text.trim().isEmpty || course.text.trim().isEmpty) return;
+                if (name.text.trim().isEmpty || course.text.trim().isEmpty) {
+                  return;
+                }
+
+
                 widget.profile.name = name.text.trim();
                 widget.profile.courseSection = course.text.trim();
                 widget.profile.isActive = active;
@@ -800,7 +1107,9 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
     if (!mounted) return;
     if (saved == true) {
       setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Student updated')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Student updated')));
     }
   }
 
@@ -821,31 +1130,39 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
               onBackgroundImageError: (_, _) {},
             ),
             const SizedBox(height: 16),
-            Text(profile.name, textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            Text(
+              profile.name,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 18),
-            Card(child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Student ID: ${profile.studentId}'),
-                const SizedBox(height: 8),
-                Text('Course: ${profile.courseSection}'),
-                const SizedBox(height: 8),
-                Text('Status: ${profile.isActive ? 'Active' : 'Inactive'}'),
-                const SizedBox(height: 8),
-                Text('Age: ${profile.age}'),
-                const SizedBox(height: 8),
-                Text('Hobby: ${profile.hobby}'),
-                const SizedBox(height: 8),
-                Text('Height: ${profile.height} cm'),
-                const SizedBox(height: 8),
-                Text('Email: ${profile.email}'),
-                const SizedBox(height: 8),
-                Text('Favorite subject: ${profile.favoriteSubject}'),
-                const SizedBox(height: 8),
-                Text('Favorite: ${profile.isFavorite ? 'Yes' : 'No'}'),
-              ]),
-            )),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Student ID: ${profile.studentId}'),
+                    const SizedBox(height: 8),
+                    Text('Course: ${profile.courseSection}'),
+                    const SizedBox(height: 8),
+                    Text('Status: ${profile.isActive ? 'Active' : 'Inactive'}'),
+                    const SizedBox(height: 8),
+                    Text('Age: ${profile.age}'),
+                    const SizedBox(height: 8),
+                    Text('Hobby: ${profile.hobby}'),
+                    const SizedBox(height: 8),
+                    Text('Height: ${profile.height} cm'),
+                    const SizedBox(height: 8),
+                    Text('Email: ${profile.email}'),
+                    const SizedBox(height: 8),
+                    Text('Favorite subject: ${profile.favoriteSubject}'),
+                    const SizedBox(height: 8),
+                    Text('Favorite: ${profile.isFavorite ? 'Yes' : 'No'}'),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: editStudent,
@@ -859,25 +1176,174 @@ class _StudentDetailsScreenState extends State<StudentDetailsScreen> {
   }
 }
 
-
-class AddStudentScreen extends StatelessWidget {
+// CTF 8: New enrollment form, added without changing the original directory UI.
+class AddStudentScreen extends StatefulWidget {
   const AddStudentScreen({super.key});
+
+  @override
+  State<AddStudentScreen> createState() => _AddStudentScreenState();
+}
+
+class _AddStudentScreenState extends State<AddStudentScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _studentIdController = TextEditingController();
+  final _fullNameController = TextEditingController();
+  final _courseController = TextEditingController();
+  final _yearLevelController = TextEditingController();
+  final _emailController = TextEditingController();
+
+  @override
+  void dispose() {
+    _studentIdController.dispose();
+    _fullNameController.dispose();
+    _courseController.dispose();
+    _yearLevelController.dispose();
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  String? _required(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'This field is required';
+    }
+    return null;
+  }
+
+  String? _validateStudentId(String? value) {
+    final requiredError = _required(value);
+    if (requiredError != null) return requiredError;
+    final existingIds =
+        ModalRoute.of(context)?.settings.arguments as List<String>? ?? [];
+    if (existingIds.contains(value!.trim())) {
+      return 'Student ID already exists';
+    }
+    return null;
+  }
+
+  String? _validateYearLevel(String? value) {
+    final requiredError = _required(value);
+    if (requiredError != null) return requiredError;
+    final year = int.tryParse(value!.trim());
+    if (year == null || year < 1 || year > 5) {
+      return 'Enter a valid year level (1–5)';
+    }
+    return null;
+  }
+
+  String? _validateEmail(String? value) {
+    final requiredError = _required(value);
+    if (requiredError != null) return requiredError;
+    final pattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+    if (!pattern.hasMatch(value!.trim())) {
+      return 'Enter a valid email address';
+    }
+    return null;
+  }
+
+  void _submitForm() {
+    if (!_formKey.currentState!.validate()) return;
+
+    final newStudent = Profile(
+      image: 'assets/image/DBTC-_School_Logo.png',
+      name: _fullNameController.text.trim(),
+      courseSection:
+          '${_courseController.text.trim()} ${_yearLevelController.text.trim()}',
+      age: 0, // Enrollment form does not request age.
+      hobby: 'Not specified',
+      height: 0,
+      studentId: _studentIdController.text.trim(),
+      email: _emailController.text.trim(),
+      favoriteSubject: 'Not specified',
+    );
+
+    _studentIdController.clear();
+    _fullNameController.clear();
+    _courseController.clear();
+    _yearLevelController.clear();
+    _emailController.clear();
+    Navigator.pop(context, newStudent);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Add Student')),
-      body: const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(Icons.person_add_alt_1, size: 76, color: Colors.deepPurple),
-              SizedBox(height: 18),
-              Text('Add Student', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-              SizedBox(height: 10),
-              Text('Fill in the details to add a new student.',
-                textAlign: TextAlign.center),
+              const Icon(
+                Icons.person_add_alt_1,
+                size: 76,
+                color: Colors.deepPurple,
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Add Student',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Fill in the details to add a new student.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              TextFormField(
+                controller: _studentIdController,
+                decoration: const InputDecoration(
+                  labelText: 'Student ID',
+                  border: OutlineInputBorder(),
+                ),
+                validator: _validateStudentId,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _fullNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Full Name',
+                  border: OutlineInputBorder(),
+                ),
+                validator: _required,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _courseController,
+                decoration: const InputDecoration(
+                  labelText: 'Course',
+                  border: OutlineInputBorder(),
+                ),
+                validator: _required,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _yearLevelController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Year Level',
+                  border: OutlineInputBorder(),
+                ),
+                validator: _validateYearLevel,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email Address',
+                  border: OutlineInputBorder(),
+                ),
+                validator: _validateEmail,
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _submitForm,
+                icon: const Icon(Icons.check_circle_outline),
+                label: const Text('Enroll Student'),
+              ),
             ],
           ),
         ),
